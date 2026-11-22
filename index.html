@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
+<meta name="referrer" content="no-referrer">
+<title>Tarek Show</title>
+<style>
+:root{color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{display:grid;place-items:center;background:linear-gradient(160deg,#062a52,#0a1220 55%,#0b5ea8);color:#eef5f5;font:16px/1.5 "Segoe UI",Tahoma,sans-serif;padding:16px}
+form{width:min(100%,360px);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:20px;padding:26px}
+h1{margin:0 0 6px;font-size:22px}
+p{margin:0 0 18px;color:#a9bcbf;font-size:14px}
+input[type=password]{width:100%;font:600 17px "Segoe UI",sans-serif;padding:12px 14px;border-radius:12px;border:1.5px solid rgba(255,255,255,.2);background:rgba(0,0,0,.25);color:#fff;direction:ltr;text-align:left}
+input:focus-visible,button:focus-visible{outline:3px solid #f2b632;outline-offset:2px}
+label{display:flex;gap:8px;align-items:center;margin:12px 0 16px;font-size:14px;cursor:pointer}
+label input{width:18px;height:18px;accent-color:#f2b632}
+button{width:100%;min-height:46px;border:0;border-radius:999px;background:#f2b632;color:#111;font:700 16px "Segoe UI",sans-serif;cursor:pointer}
+button[disabled]{opacity:.6;cursor:wait}
+#err{min-height:1.4em;margin:12px 0 0;color:#ff8a7a;font-weight:600;font-size:14px}
+</style>
+</head>
+<body>
+<form id="f" autocomplete="on">
+  <h1>استوديو طارق شو</h1>
+  <p>الصفحة دي محمية. اكتب الباسورد عشان تفتحها.</p>
+  <input id="pw" type="password" autocomplete="current-password" aria-label="الباسورد" required>
+  <label><input id="rm" type="checkbox"> افتكرني على الجهاز ده</label>
+  <button id="go" type="submit">فتح</button>
+  <div id="err" role="alert"></div>
+</form>
+<script>
+{
+const SALT='05b1fdc32aa3f3ca0a5457f39e9b8949',ITER=310000,MAN='305288cbcd044fa1',CHECK='568064b70a26d574f62796782753053bd4c994f4926bb57fda0baad7416c68e6b048e4f62a3800d0',KEYNAME='ts-key-'+SALT.slice(0,8);
+const hex=h=>new Uint8Array(h.match(/../g).map(x=>parseInt(x,16)));
+const b64=u=>btoa(String.fromCharCode(...u)),unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+const TYPES={ttf:'font/ttf',webp:'image/webp',png:'image/png',jpg:'image/jpeg',js:'text/javascript',json:'application/json'};
+async function derive(pw){const base=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2',salt:hex(SALT),iterations:ITER,hash:'SHA-256'},base,{name:'AES-GCM',length:256},true,['decrypt'])}
+async function dec(key,buf){const u=new Uint8Array(buf);return crypto.subtle.decrypt({name:'AES-GCM',iv:u.slice(0,12)},key,u.slice(12))}
+const get=async id=>{const r=await fetch('d/'+id+'.bin',{cache:'no-cache'});if(!r.ok)throw new Error('net');return r.arrayBuffer()};
+async function open(key){
+  await dec(key,hex(CHECK));
+  const all=new Uint8Array(await dec(key,await get(MAN)));const hl=new DataView(all.buffer).getUint32(0);
+  const idx=JSON.parse(new TextDecoder().decode(all.subarray(4,4+hl)));const base=4+hl;const part=k=>all.subarray(base+idx[k][0],base+idx[k][0]+idx[k][1]);
+  const urls={};for(const p of Object.keys(idx)){if(p==='app')continue;const ext=p.split('.').pop();urls[p]=URL.createObjectURL(new Blob([part(p)],{type:TYPES[ext]||'application/octet-stream'}))}
+  let html=new TextDecoder().decode(part('app'));
+  for(const[p,u]of Object.entries(urls))html=html.split(p).join(u);
+  html=html.replace('<head>','<head><meta name="robots" content="noindex, nofollow, noarchive">');
+  document.open();document.write(html);document.close()}
+const err=s=>document.getElementById('err').textContent=s;
+document.getElementById('f').addEventListener('submit',async e=>{e.preventDefault();const b=document.getElementById('go');b.disabled=true;err('');b.textContent='بيفتح...';
+  try{const key=await derive(document.getElementById('pw').value);await dec(key,hex(CHECK));
+    if(document.getElementById('rm').checked){try{localStorage.setItem(KEYNAME,b64(new Uint8Array(await crypto.subtle.exportKey('raw',key))))}catch(x){}}
+    await open(key)}
+  catch(x){b.disabled=false;b.textContent='فتح';err(x&&x.message==='net'?'مقدرتش أحمّل الملفات. جرّب تاني.':'الباسورد غلط.')}});
+(async()=>{let s=null;try{s=localStorage.getItem(KEYNAME)}catch(x){}if(!s)return;
+  try{const key=await crypto.subtle.importKey('raw',unb64(s),{name:'AES-GCM'},false,['decrypt']);await open(key)}catch(x){try{localStorage.removeItem(KEYNAME)}catch(y){}}})();
+}
+</script>
+</body>
+</html>
